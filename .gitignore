@@ -5,10 +5,8 @@ Output/*
 .clean_env
 *.txt
 __*
-test.py
-VOICEVOX
+test*
 *.wav
-models--staka--fugumt-en-ja/
 *.exe
 node_modules
 !lore.txt
@@ -16,3 +14,4 @@ config.json
 settings2.json
 settings.json
 package-lock.json
+.idea
