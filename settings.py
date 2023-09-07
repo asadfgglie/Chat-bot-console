@@ -8,7 +8,7 @@ def load_settings():
         with open("settings.json", "r") as json_file:
 
             settings = json.load(json_file)
-            print(settings)
+            print(json.dumps(settings, indent=2))
 
     except:
         print("Unable to load Settings file.")
@@ -39,8 +39,7 @@ def get_settings(key):
         return settings[key]
     except:
         print(f"setting[{key}] is not found.")
-        # print(traceback.format_exc())
         return ''
 
 
-settings = None
+settings: dict

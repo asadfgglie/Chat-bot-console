@@ -1,10 +1,10 @@
 from time import time
 
 
-class Timer():
+class Timer:
     def __init__(self):
         self.started = False
-        self.elasped_time = 0
+        self.elapsed_time = 0
         self.start_time = 0
 
     def start(self):

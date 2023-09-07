@@ -1,15 +1,16 @@
-import asyncio
-import traceback
-import pytchat
-import chatbot
 import time
-from twitchio.ext import commands
+import traceback
 from threading import Thread
+
+import pytchat
+from twitchio.ext import commands
+
+import chatbot
 
 read_chat_youtube_thread = None
 read_chat_youtube_thread_running = False
 
-twitchbot = None
+twitchbot: 'Bot'
 read_chat_twitch_thread = None
 read_chat_twitch_thread_running = False
 
@@ -19,13 +20,11 @@ twitch_access_token = ''
 twitch_channel_name = ''
 
 logging_eventhandlers = []
-excluded_users_list = []
 
 
 def read_chat_youtube():
-    log_message("startinging chat fetching...")
+    log_message("startling chat fetching...")
     global read_chat_youtube_thread_running, youtube_video_id
-    chat = None
     try:
         chat = pytchat.create(video_id=youtube_video_id)
     except:
@@ -42,11 +41,10 @@ def read_chat_loop(chat):
     global read_chat_youtube_thread_running
     while read_chat_youtube_thread_running and chat.is_alive():
         for c in chat.get().sync_items():
-            if c.author.name not in excluded_users_list:
-                log_message(f"{c.datetime} [{c.author.name}]- {c.message}")
-                chatbot.send_user_input(c.message)
-                # print(response)
-                time.sleep(1)
+            log_message(f"{c.datetime} [{c.author.name}]- {c.message}")
+            chatbot.send_user_input(c.message)
+            # print(response)
+            time.sleep(1)
     log_message("Chat fetching ended")
 
 
@@ -63,23 +61,6 @@ class Bot(commands.Bot):
         # Initialise our Bot with our access token, prefix and a list of channels to join on boot...
         super().__init__(token=token,
                          prefix='?', initial_channels=initial_channels)
-        global excluded_users_list
-        # Function to reload the excluded users from the file
-        reload_thread = Thread(target=self.reload_excluded_users)
-        reload_thread.start()
-
-    def reload_excluded_users(self):
-        while True:
-            try:
-                global excluded_users_list
-                file_path = "excluded_users.txt"
-                with open(file_path, "r") as file:
-                    content = file.read()
-                    excluded_users_list = content.split("\n")
-            except:
-                print(f"Unable to load {file_path}.")
-                print(traceback.format_exc())
-            time.sleep(10)  # Sleep for 30 seconds before reloading
 
     async def event_ready(self):
         # We are logged in and ready to chat and use commands...
@@ -88,15 +69,14 @@ class Bot(commands.Bot):
 
     async def event_message(self, message):
         # Messages with echo set to True are messages sent by the bot...
-        # For now we just want to ignore them...
+        # For now, we just want to ignore them...
         if message.echo:
             return
 
         # Print the contents of our message to console...
-        if message.author.name not in excluded_users_list:
-            print(message)
-            log_message(message.content)
-            chatbot.send_user_input(message.content)
+        print(message)
+        log_message(message.content)
+        chatbot.send_user_input(message.content)
 
         # Since we have commands and are overriding the default `event_message`
         # We must let the bot know we want to handle and invoke our commands...
@@ -109,17 +89,17 @@ class Bot(commands.Bot):
 
 
 def read_chat_twitch():
-    log_message("startinging chat fetching...")
+    log_message("startling chat fetching...")
     global twitchbot
     global read_chat_twitch_thread_running, read_chat_twitch_thread
     global twitch_access_token, twitch_channel_name
     twitchbot = Bot(twitch_access_token, [twitch_channel_name])
-    read_chat_twitch_thread = Thread(target=runbot)
+    read_chat_twitch_thread = Thread(target=run_bot)
     read_chat_twitch_thread.start()
     read_chat_twitch_thread_running = True
 
 
-def runbot():
+def run_bot():
     log_message("Chat fetching started")
     twitchbot.run()
 
