@@ -1,3 +1,4 @@
+import base64
 import io
 import json
 import os
@@ -14,6 +15,7 @@ import pyaudio
 import requests
 import romajitable
 import speech_recognition as sr
+import torch.cuda
 import whisper
 from pydub import AudioSegment
 from speech_recognition import AudioData
@@ -22,7 +24,7 @@ import chatbot
 import dict
 import streamChat
 import subLocal as SUB
-import translator
+from deep_translator import GoogleTranslator
 from timer import Timer
 
 
@@ -32,14 +34,12 @@ def load_config():
             data = json.load(json_file)
             print(json.dumps(data, indent=2))
 
-            translator.deepl_api_key = data['deepl_api_key']
-            translator.use_deepl = data['use_deepl']
-            chatbot.openai_api_key = data['openai_api_key']
-            chatbot.use_text_generation_web_ui = data['use_text_generation_web_ui']
-            global voice_vox_api_key
-            voice_vox_api_key = data['voice_vox_api_key']
-            global use_cloud_voice_vox
-            use_cloud_voice_vox = data['use_cloud_voice_vox']
+            global VOICE_VOX_URL_LOCAL
+            VOICE_VOX_URL_LOCAL = data['voicevox_local_url']
+            global voicevox_api_key
+            voicevox_api_key = data['voicevox_api_key']
+            global use_cloud_voicevox
+            use_cloud_voicevox = data['use_cloud_voicevox']
             global use_elevenlab
             use_elevenlab = data['use_elevenlab']
             global elevenlab_api_key
@@ -47,6 +47,10 @@ def load_config():
             streamChat.twitch_access_token = data['twitch_access_token']
             streamChat.twitch_channel_name = data['twitch_channel_name']
             streamChat.youtube_video_id = data['youtube_video_id']
+            global use_voicevox
+            use_voicevox = data['use_voicevox']
+            global VALL_E_X_URL
+            VALL_E_X_URL = data['vall_e_x_url']
 
             if elevenlab_api_key == '':
                 elevenlab_api_key = os.getenv("ELEVENLAB_API_KEY")
@@ -69,21 +73,29 @@ def save_config(key, value):
         print("Unable to load JSON file.")
         print(traceback.format_exc())
 
+def translate(text, from_code, to_code):
+    if use_voicevox:
+        return GoogleTranslator(source=from_code, target=to_code).translate(text)
+    else:
+        return text
+
 
 input_device_id = None
 output_device_id = [None, None]
 
 VOICE_VOX_URL_HIGH_SPEED = "https://api.su-shiki.com/v2/voicevox/audio/"
 VOICE_VOX_URL_LOW_SPEED = "https://api.tts.quest/v1/voicevox/"
-VOICE_VOX_URL_LOCAL = "127.0.0.1"
+VOICE_VOX_URL_LOCAL = "127.0.0.1:50021"
+VALL_E_X_URL = '127.0.0.1:6000'
 
 VOICE_OUTPUT_FILENAME = "audioResponse.wav"
 
 use_elevenlab = False
 elevenlab_api_key = ''
 elevenlab_voice_id = ''
-use_cloud_voice_vox = False
-voice_vox_api_key = ''
+use_cloud_voicevox = False
+use_voicevox = False
+voicevox_api_key = ''
 speakersResponse: Optional[Dict] = None
 voicevox_server_started = False
 speaker_id = 1
@@ -93,7 +105,7 @@ PUSH_TO_RECORD_KEY = '5'
 use_ingame_push_to_talk_key = False
 ingame_push_to_talk_key = 'f'
 
-whisper_filter_list = ['you', 'thank you.', 'thanks for watching.']
+whisper_filter_list = ['you', 'thank you.', 'thanks for watching.', '你']
 pipeline_elapsed_time = 0
 TTS_pipeline_start_time = 0
 pipeline_timer = Timer()
@@ -101,26 +113,40 @@ step_timer = Timer()
 model: whisper.model.Whisper
 voicevox_process: subprocess.Popen
 
+is_show_voicevox_connect_warn = False
 
 def initialize_model():
     global model
-    model = whisper.load_model("base")
+    model = whisper.load_model("base", device='cuda' if torch.cuda.is_available() else 'cpu')
 
 
-def start_voicevox_server():
+def connect_voicevox_server():
     global voicevox_server_started, voicevox_process
-    if voicevox_server_started:
-        return
-    # start voicevox server
-    voicevox_process = subprocess.Popen("C:\\voicevox_engine\\windows-nvidia\\run.exe")
-    voicevox_server_started = True
+    url = f"http://{VOICE_VOX_URL_LOCAL}/version"
+
+    try:
+        response = requests.request("GET", url)
+    except:
+        voicevox_server_started = False
+        return False
+
+    if response.status_code == 200:
+        voicevox_server_started = True
+        return True
+    voicevox_server_started = False
+    return False
 
 
 def initialize_speakers():
-    global speakersResponse
+    global speakersResponse, is_show_voicevox_connect_warn
     if not voicevox_server_started:
-        start_voicevox_server()
-    url = f"http://{VOICE_VOX_URL_LOCAL}:50021/speakers"
+        if not connect_voicevox_server():
+            if not is_show_voicevox_connect_warn:
+                print("voicevox_engine didn't start!")
+                print("Can't initialize speakers!")
+                is_show_voicevox_connect_warn = True
+            return
+    url = f"http://{VOICE_VOX_URL_LOCAL}/speakers"
     while True:
         try:
             response = requests.request("GET", url)
@@ -135,20 +161,29 @@ def get_speaker_names():
     global speakersResponse
     if speakersResponse is None:
         initialize_speakers()
-    speakerNames = list(
-        map(lambda speaker: speaker['name'],  speakersResponse))
-    return speakerNames
+    try:
+        speakerNames = list(map(lambda speaker: speaker['name'],  speakersResponse))
+        return speakerNames
+    except:
+        return ['No data!']
 
 
 def get_speaker_styles(speaker_name):
     global speakersResponse
     if speakersResponse is None:
         initialize_speakers()
-    speaker_styles = next(
-        speaker['styles'] for speaker in speakersResponse if speaker['name'] == speaker_name)
+    try:
+        speaker_styles = next(speaker['styles'] for speaker in speakersResponse if speaker['name'] == speaker_name)
 
-    print(speaker_styles)
-    return speaker_styles
+        print(speaker_styles)
+        return speaker_styles
+    except:
+        return [
+            {
+                'name': 'No data!',
+                'id': 'No data!'
+            }
+        ]
 
 
 recording = False
@@ -199,51 +234,75 @@ def cloud_synthesize(text, speaker_id, api_key=''):
             f'Api key {api_key} detected, sending request to high speed server.')
         url = f"{VOICE_VOX_URL_HIGH_SPEED}?text={text}&speaker={speaker_id}&key={api_key}"
     print(f"Sending POST request to: {url}")
-    response = requests.request(
-        "POST", url)
-    print(f'response: {response}')
+    try:
+        response = requests.request(
+            "POST", url)
+        print(f'response: {response}')
 
-    wav_bytes: bytes
-    if api_key == '':
-        response_json = response.json()
+        wav_bytes: bytes
+        if api_key == '':
+            response_json = response.json()
+
+            try:
+                # download wav file from response
+                wav_url = response_json['wavDownloadUrl']
+            except:
+                print("Failed to get wav download link.")
+                print(response_json)
+                return False
+            print(f"Downloading wav response from {wav_url}")
+            wav_bytes = requests.get(wav_url).content
+        else:
+            wav_bytes = response.content
+
+        with open(VOICE_OUTPUT_FILENAME, "wb") as file:
+            file.write(wav_bytes)
+        return True
+    except:
+        return False
 
 
-        try:
-            # download wav file from response
-            wav_url = response_json['wavDownloadUrl']
-        except:
-            print("Failed to get wav download link.")
-            print(response_json)
-            return
-        print(f"Downloading wav response from {wav_url}")
-        wav_bytes = requests.get(wav_url).content
-    else:
-        wav_bytes = response.content
+def vall_e_x_synthesize(text, lang):
+    try:
+        response = requests.request("POST", f'http://{VALL_E_X_URL}/synthesize_long', params={
+            'text': text,
+            'lang': lang
+        })
 
-    with open(VOICE_OUTPUT_FILENAME, "wb") as file:
-        file.write(wav_bytes)
+        with open(VOICE_OUTPUT_FILENAME, "wb") as file:
+            file.write(base64.b64decode(response.json()['data'].encode()))
+        return True
+    except:
+        print("vall_e_x server doesn't start!")
+        return False
 
 
 def synthesize_audio(text, speaker_id):
-    global use_cloud_voice_vox, voice_vox_api_key
-    global use_elevenlab
+    global use_cloud_voicevox, voicevox_api_key, use_elevenlab, use_voicevox
     if use_elevenlab:
-        elevenlab_synthesize(text)
-    else:
-        if use_cloud_voice_vox:
-            cloud_synthesize(text, speaker_id, api_key=voice_vox_api_key)
+        return elevenlab_synthesize(text)
+    elif use_voicevox:
+        if use_cloud_voicevox:
+            return cloud_synthesize(text, speaker_id, api_key=voicevox_api_key)
         else:
-            local_synthesize(text, speaker_id)
+            return no_api_cloud_synthesize(text, speaker_id)
+    else:
+        return vall_e_x_synthesize(text, 'zh' if dict.language_dict[input_language_name].startswith('zh') else dict.language_dict[input_language_name])
 
 
-def local_synthesize(text, speaker_id):
-    VoiceTextResponse = requests.request(
-        "POST", f"http://127.0.0.1:50021/audio_query?text={text}&speaker={speaker_id}")
-    AudioResponse = requests.request(
-        "POST", f"http://127.0.0.1:50021/synthesis?speaker={speaker_id}", data=VoiceTextResponse)
+def no_api_cloud_synthesize(text, speaker_id):
+    if voicevox_server_started:
+        VoiceTextResponse = requests.request(
+            "POST", f"http://{VOICE_VOX_URL_LOCAL}/audio_query?text={text}&speaker={speaker_id}")
+        AudioResponse = requests.request(
+            "POST", f"http://{VOICE_VOX_URL_LOCAL}/synthesis?speaker={speaker_id}", data=VoiceTextResponse)
 
-    with open(VOICE_OUTPUT_FILENAME, "wb") as file:
-        file.write(AudioResponse.content)
+        with open(VOICE_OUTPUT_FILENAME, "wb") as file:
+            file.write(AudioResponse.content)
+        return True
+    else:
+        print("voicevox server didn't start!")
+        return False
 
 
 def elevenlab_synthesize(message):
@@ -263,12 +322,15 @@ def elevenlab_synthesize(message):
         }
     }
     print(f"Sending POST request to: {url}")
-    response = requests.post(url, headers=headers, json=data, stream=True)
-    print(response)
-    audio_content = AudioSegment.from_file(
-        io.BytesIO(response.content), format="mp3")
-    audio_content.export(VOICE_OUTPUT_FILENAME, 'wav')
-
+    try:
+        response = requests.post(url, headers=headers, json=data, stream=True)
+        print(response)
+        audio_content = AudioSegment.from_file(
+            io.BytesIO(response.content), format="mp3")
+        audio_content.export(VOICE_OUTPUT_FILENAME, 'wav')
+        return True
+    except:
+        return False
 
 def PlayAudio():
     global output_device_id
@@ -401,7 +463,10 @@ def start_STTS_pipeline(use_chatbot=False):
         audio = whisper.pad_or_trim(audio)
         mel = whisper.log_mel_spectrogram(audio).to(model.device)
         options = whisper.DecodingOptions(
-            language=input_language_name.lower(), without_timestamps=True, fp16=False if model.device == 'cpu' else None)
+            language=input_language_name.lower(),
+            without_timestamps=True,
+            fp16=False if model.device == 'cpu' else None,
+            task='translate' if input_language_name != 'English' else 'transcribe')
         result = whisper.decode(model, mel, options)
         input_text = result.text
     except sr.UnknownValueError:
@@ -417,7 +482,7 @@ def start_STTS_pipeline(use_chatbot=False):
     if input_text.strip().lower() in whisper_filter_list:
         log_message(f'Input {input_text} was filtered.')
         return
-    with open("Input.txt", "w", encoding="utf-8") as file:
+    with open("input.txt", "w", encoding="utf-8") as file:
         file.write(input_text)
     pipeline_elapsed_time += pipeline_timer.end()
     if use_chatbot:
@@ -433,17 +498,16 @@ def start_TTS_pipeline(input_text):
     global speaker_id
     global pipeline_elapsed_time
     pipeline_timer.start()
-    inputLanguage = language_dict[input_language_name][:2]
+    inputLanguage = language_dict[input_language_name]
     if use_elevenlab:
         outputLanguage = 'en'
     else:
         outputLanguage = 'ja'
     print(f"input Language: {inputLanguage}, output Language: {outputLanguage}")
-    translate = inputLanguage != outputLanguage
-    if translate:
+    need_translate = inputLanguage != outputLanguage
+    if need_translate:
         step_timer.start()
-        input_processed_text = translator.translate(
-            input_text, inputLanguage, outputLanguage)
+        input_processed_text = translate(input_text, inputLanguage, outputLanguage)
         log_message(f'Translation: {input_processed_text} ({step_timer.end()}s)')
     else:
         input_processed_text = input_text
@@ -457,26 +521,25 @@ def start_TTS_pipeline(input_text):
     with open("translation.txt", "w", encoding="utf-8") as file:
         file.write(filtered_text)
     step_timer.start()
-    synthesize_audio(
-        filtered_text, speaker_id)
-    log_message(
-        f"Speech synthesized for text [{filtered_text}] ({step_timer.end()}s)")
-    log_message(
-        f'Total time: ({round(pipeline_elapsed_time + pipeline_timer.end(),2)}s)')
-    print(f"ingame_push_to_talk_key: {ingame_push_to_talk_key}")
-    global use_ingame_push_to_talk_key
-    if use_ingame_push_to_talk_key and ingame_push_to_talk_key != '':
-        keyboard.press(ingame_push_to_talk_key)
-    PlayAudio()
-    if use_ingame_push_to_talk_key and ingame_push_to_talk_key != '':
-        keyboard.release(ingame_push_to_talk_key)
-    global last_input_text
-    last_input_text = input_text
-    global last_input_language
-    last_input_language = inputLanguage
-    global last_voice_param
-    last_voice_param = speaker_id
-    pipeline_elapsed_time = 0
+    if synthesize_audio(filtered_text, speaker_id):
+        log_message(
+            f"Speech synthesized for text [{filtered_text}] ({step_timer.end()}s)")
+        log_message(
+            f'Total time: ({round(pipeline_elapsed_time + pipeline_timer.end(),2)}s)')
+        print(f"ingame_push_to_talk_key: {ingame_push_to_talk_key}")
+        global use_ingame_push_to_talk_key
+        if use_ingame_push_to_talk_key and ingame_push_to_talk_key != '':
+            keyboard.press(ingame_push_to_talk_key)
+        PlayAudio()
+        if use_ingame_push_to_talk_key and ingame_push_to_talk_key != '':
+            keyboard.release(ingame_push_to_talk_key)
+        global last_input_text
+        last_input_text = input_text
+        global last_input_language
+        last_input_language = inputLanguage
+        global last_voice_param
+        last_voice_param = speaker_id
+        pipeline_elapsed_time = 0
 
 
 def playOriginal():
@@ -484,10 +547,9 @@ def playOriginal():
     global last_voice_param
     global last_input_language
     global input_language_name
-    inputLanguage = language_dict[input_language_name][:2]
+    inputLanguage = language_dict[input_language_name]
     if last_input_language != 'en':
-        last_input_text_processed = translator.translate(
-            last_input_text, inputLanguage, 'en')
+        last_input_text_processed = translate(last_input_text, inputLanguage, 'en')
     else:
         last_input_text_processed = last_input_text
     text_ja = romajitable.to_kana(last_input_text_processed).katakana
@@ -507,5 +569,3 @@ def log_message(message_text):
 def change_input_language(input_lang_name):
     global input_language_name
     input_language_name = input_lang_name
-
-

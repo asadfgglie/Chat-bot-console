@@ -1,4 +1,5 @@
 import json
+import os
 import random
 import time
 from enum import Enum
@@ -13,10 +14,10 @@ import sounddevice as sd
 
 import STTSLocal as STTS
 import chatbot
+import dict
 import settings
 import streamChat
 import subLocal as SUB
-import translator
 
 
 class Pages(Enum):
@@ -30,9 +31,13 @@ class Pages(Enum):
 
 current_page = Pages.AUDIO_INPUT
 pageChange_eventhandlers = []
+option_menu_list: list['OptionsFrame'] = []
+option_frame_list: list['OptionsFrame'] = []
 audio_level = 0.3
 
-mic_meters = []
+mic_meters: list['AudiodeviceSelection'] = []
+
+
 
 
 class Microphone:
@@ -40,7 +45,7 @@ class Microphone:
         self.stream = sd.InputStream(callback=self.callback)
         self.volume = 0.3
         self.device = device
-        self.thread = Thread(target=self.start)
+        self.thread = Thread(target=self.start, daemon=True)
 
     def start(self, device):
         self.device = device
@@ -53,7 +58,7 @@ class Microphone:
             sd.sleep(1000)
 
     def start_thread(self, device=None):
-        self.thread = Thread(target=self.start, args=(device,))
+        self.thread = Thread(target=self.start, args=(device,), daemon=True)
         self.thread.start()
 
     def callback(self, indata, _frames, _time, _status):
@@ -231,18 +236,19 @@ class ChatFrame(customtkinter.CTkFrame):
         self.no_talking_time = 60 * (random.random() * 9 + 1)
         self.isRecording = False
         self.thread = Thread(target=STTS.start_record_auto)
-        # add widgets onto the frame...
+
         self.textbox = customtkinter.CTkTextbox(self, width=400, height=325, maxundo=-1, undo=True)
         self.textbox.grid(row=0, column=0, rowspan=3, columnspan=4)
-        # configure textbox to be read-only
         self.textbox.configure(state="disabled")
+
         chatbot.logging_eventhandlers.append(self.log_message_on_console)
 
         self.user_input_var = customtkinter.StringVar(self, '')
-        self.user_input = customtkinter.CTkEntry(
-            master=self, textvariable=self.user_input_var, width=200)
-        self.user_input.grid(
-            row=3, column=0, padx=(10,0), pady=(10,0), sticky='W', columnspan=2)
+        self.user_input = customtkinter.CTkEntry(master=self, textvariable=self.user_input_var, width=200)
+        self.user_input.grid(row=3, column=0, padx=(10,0), pady=(10,0), sticky='W', columnspan=2)
+        self.user_input.bind('<Return>', self.send_user_input)
+        self.user_input.focus_set()
+
         self.send_button = customtkinter.CTkButton(master=self,
                                                    width=32,
                                                    height=32,
@@ -251,7 +257,8 @@ class ChatFrame(customtkinter.CTkFrame):
                                                    text="send",
                                                    command=self.send_user_input,
                                                    fg_color='grey')
-        self.send_button.grid(row=3, column=2, pady=(10,0), padx=(10,0))
+        self.send_button.grid(row=3, column=2, pady=(10,0), padx=(5,0))
+
         self.recordButton = customtkinter.CTkButton(master=self,
                                                     width=120,
                                                     height=32,
@@ -260,7 +267,7 @@ class ChatFrame(customtkinter.CTkFrame):
                                                     text="Start Recording",
                                                     command=self.recordButton_callback,
                                                     fg_color='grey')
-        self.recordButton.grid(row=3, column=3, pady=(10,0), padx=10)
+        self.recordButton.grid(row=3, column=3, pady=(10,0), padx=(5,5))
 
         self.regenerateButton = customtkinter.CTkButton(master=self,
                                                         width=0,
@@ -270,17 +277,7 @@ class ChatFrame(customtkinter.CTkFrame):
                                                         text="Regenerate",
                                                         command=self.regenerate_callback,
                                                         fg_color='grey')
-        self.regenerateButton.grid(row=4, column=0, pady=(10,0), padx=(10,0))
-
-        self.continueButton = customtkinter.CTkButton(master=self,
-                                                      width=0,
-                                                      height=32,
-                                                      border_width=0,
-                                                      corner_radius=8,
-                                                      text="Continue",
-                                                      command=self.continue_callback,
-                                                      fg_color='grey')
-        self.continueButton.grid(row=4, column=1, pady=(10,0), padx=(10,0))
+        self.regenerateButton.grid(row=4, column=0, pady=(10,0), padx=(5,0))
 
         self.remove_lastButton = customtkinter.CTkButton(master=self,
                                                          width=0,
@@ -290,7 +287,17 @@ class ChatFrame(customtkinter.CTkFrame):
                                                          text="Remove last",
                                                          command=self.remove_last_callback,
                                                          fg_color='grey')
-        self.remove_lastButton.grid(row=4, column=2, pady=(10,0), padx=(10,0))
+        self.remove_lastButton.grid(row=4, column=1, pady=(10,0), padx=(5,0))
+
+        self.continueButton = customtkinter.CTkButton(master=self,
+                                                      width=0,
+                                                      height=32,
+                                                      border_width=0,
+                                                      corner_radius=8,
+                                                      text="Continue",
+                                                      command=self.continue_callback,
+                                                      fg_color='grey')
+        self.continueButton.grid(row=4, column=2, pady=(10,0), padx=(5,0))
 
         self.clear_historyButton = customtkinter.CTkButton(master=self,
                                                            width=0,
@@ -300,7 +307,7 @@ class ChatFrame(customtkinter.CTkFrame):
                                                            text="Clear history",
                                                            command=self.clear_history_callback,
                                                            fg_color='grey')
-        self.clear_historyButton.grid(row=4, column=3, pady=(10,0), padx=10)
+        self.clear_historyButton.grid(row=4, column=3, pady=(10,0), padx=(5,5))
 
         self.start_random_dialog_loopButton = customtkinter.CTkButton(master=self,
                                                                       width = 0,
@@ -310,19 +317,19 @@ class ChatFrame(customtkinter.CTkFrame):
                                                                       text = "Start random dialog thread",
                                                                       command = self.start_random_dialog_loop_callback,
                                                                       fg_color = 'grey')
-        self.start_random_dialog_loopButton.grid(row=5, column=1, pady=(10,0), padx=(10,0), columnspan=2)
+        self.start_random_dialog_loopButton.grid(row=5, column=1, pady=(10,0), padx=(5,5), columnspan=2)
 
     def start_random_dialog_loop_callback(self):
-        if not chatbot.use_text_generation_web_ui:
-            print('random dialog only support text_generation_web_ui api!')
-            return
         if not chatbot.is_random_dialog_running:
-            self.start_random_dialog_loopButton.configure(text="Stop random dialog thread", fg_color='#fc7b5b')
-            chatbot.is_random_dialog_running = not chatbot.is_random_dialog_running
+            self.start_random_dialog_loopButton.configure(text="Stop random dialog", fg_color='#fc7b5b')
+            chatbot.is_random_dialog_running = True
+            print('Start random dialog')
             Thread(target=self.start_random_dialog_loop).start()
         else:
-            self.start_random_dialog_loopButton.configure(text="Start random dialog thread", fg_color='grey')
-            chatbot.is_random_dialog_running = not chatbot.is_random_dialog_running
+            self.start_random_dialog_loopButton.configure(text="Start random dialog", fg_color='grey')
+            chatbot.is_random_dialog_running = False
+            print('Stop random dialog')
+            self.clear_history_callback()
 
     def start_random_dialog_loop(self):
         self.clear_history_callback()
@@ -341,75 +348,60 @@ class ChatFrame(customtkinter.CTkFrame):
         self.textbox.delete('1.0', customtkinter.END)
         self.textbox.configure(state=customtkinter.DISABLED)
 
-        if chatbot.use_text_generation_web_ui:
-            with open(f'log/text_generation_api/{time.strftime("%Y_%m_%d__%H_%M_%S", time.localtime(time.time()))}', 'w') as f:
-                f.write(json.dumps(chatbot.history, indent=2))
-        else:
-            with open(f'log/openai/{time.strftime("%Y_%m_%d__%H_%M_%S", time.localtime(time.time()))}', 'w') as f:
-                f.write(json.dumps(chatbot.message_log, indent=2))
+        os.makedirs('./log/', exist_ok=True)
+        with open(f'./log/{time.strftime("%Y_%m_%d__%H_%M_%S", time.localtime(time.time()))}.json', 'w') as f:
+            f.write(json.dumps(chatbot.history, indent=2))
 
-        chatbot.message_log = [
-            {"role": "system", "content": chatbot.lore},
-            {"role": "user", "content": chatbot.lore},
-        ]
         chatbot.history = {
             'internal': [],
             'visible': []
         }
 
     def remove_last_callback(self):
-        if (not chatbot.use_text_generation_web_ui and len(chatbot.message_log) == 2) or (
-                chatbot.use_text_generation_web_ui and len(chatbot.history['internal']) == 0):
-            return
         self.textbox.configure(state=customtkinter.NORMAL)
         tmp = self.textbox.get('1.0', customtkinter.END)
         self.textbox.delete('1.0', customtkinter.END)
         self.textbox.insert('1.0', tmp[:tmp.rfind(f'{chatbot.user_name}: ')])
         self.textbox.configure(state=customtkinter.DISABLED)
 
-        if chatbot.use_text_generation_web_ui:
+        try:
             last_user_input = chatbot.history['internal'].pop()[0]
             chatbot.history['visible'].pop()
-        else:
-            chatbot.message_log.pop()
-            last_user_input = chatbot.message_log.pop()["content"]
-        self.user_input.delete(0, customtkinter.END)
-        self.user_input.insert(0, last_user_input)
+
+            self.user_input.delete(0, customtkinter.END)
+            self.user_input.insert(0, last_user_input)
+        except IndexError:
+            print("Chat history is empty! Can't get back user input!")
 
     def continue_callback(self):
-        if (not chatbot.use_text_generation_web_ui and len(chatbot.message_log) == 2) or (
-                chatbot.use_text_generation_web_ui and len(chatbot.history['internal']) == 0):
-            return
-        if chatbot.use_text_generation_web_ui:
-            self.textbox.configure(state=customtkinter.NORMAL)
-            tmp = self.textbox.get('1.0', customtkinter.END)
-            self.textbox.delete('1.0', customtkinter.END)
-            self.textbox.insert('1.0', tmp[:tmp.rfind(f'{chatbot.user_name}: ')])
-            self.textbox.configure(state=customtkinter.DISABLED)
-            last_user_input = chatbot.history['internal'][-1][0]
-        else:
-            last_user_input = chatbot.message_log[-2]['content']
-
-        thread = Thread(target=chatbot.send_user_input, args=[last_user_input, True])
-        thread.start()
-
-    def regenerate_callback(self):
-        if (not chatbot.use_text_generation_web_ui and len(chatbot.message_log) == 2) or (
-                chatbot.use_text_generation_web_ui and len(chatbot.history['internal']) == 0):
-            return
         self.textbox.configure(state=customtkinter.NORMAL)
         tmp = self.textbox.get('1.0', customtkinter.END)
         self.textbox.delete('1.0', customtkinter.END)
         self.textbox.insert('1.0', tmp[:tmp.rfind(f'{chatbot.user_name}: ')])
         self.textbox.configure(state=customtkinter.DISABLED)
 
-        if chatbot.use_text_generation_web_ui:
+        try:
             last_user_input = chatbot.history['internal'][-1][0]
-        else:
-            last_user_input = chatbot.message_log[-2]['content']
 
-        thread = Thread(target=chatbot.send_user_input, args=[last_user_input, False, True])
-        thread.start()
+            thread = Thread(target=chatbot.send_user_input, args=[last_user_input, True])
+            thread.start()
+        except IndexError:
+            print("Chat history is empty! Can't continue the conversation!")
+
+    def regenerate_callback(self):
+        self.textbox.configure(state=customtkinter.NORMAL)
+        tmp = self.textbox.get('1.0', customtkinter.END)
+        self.textbox.delete('1.0', customtkinter.END)
+        self.textbox.insert('1.0', tmp[:tmp.rfind(f'{chatbot.user_name}: ')])
+        self.textbox.configure(state=customtkinter.DISABLED)
+
+        try:
+            last_user_input = chatbot.history['internal'][-1][0]
+
+            thread = Thread(target=chatbot.send_user_input, args=[last_user_input, False, True])
+            thread.start()
+        except IndexError:
+            print("Chat history is empty! Can't regenerate response!")
 
     def recordButton_callback(self):
         if self.isRecording:
@@ -423,7 +415,7 @@ class ChatFrame(customtkinter.CTkFrame):
             self.isRecording = True
             STTS.start_record_auto_chat()
 
-    def send_user_input(self):
+    def send_user_input(self, _=None):
         text = self.user_input_var.get()
         self.user_input_var.set('')
         thread = Thread(target=chatbot.send_user_input, args=[text,])
@@ -444,6 +436,8 @@ class ChatFrame(customtkinter.CTkFrame):
                     chatbot.is_talk = False
                 self.no_talking_time -= 1
                 time.sleep(1)
+            else:
+                break
         self.no_talking_time = 60 * (random.random() * (chatbot.max_no_talking_time - chatbot.min_no_talking_time) + chatbot.min_no_talking_time)
 
 
@@ -565,9 +559,9 @@ class AudiodeviceSelection(customtkinter.CTkFrame):
                 row=3, column=0, padx=10, pady=10, sticky='W')
             self.mic = Microphone()
             self.mic.start_thread(device=get_command())
-            thread = Thread(target=self.update_mic_meter_loop)
-            thread.start()
+            self.update_mic_meter_thread = Thread(target=self.update_mic_meter_loop, daemon=True)
             mic_meters.append(self)
+
 
     def update_mic_meter_loop(self):
         while True:
@@ -794,30 +788,31 @@ class OptionsFrame(customtkinter.CTkFrame):
 
         if enable_input_language:
             self.default_input_language = "English"
-            self.input_language = ["English", "Japanese", "Chinese"]
+            self.input_language = list(dict.language_dict.keys())
 
             label_Input = customtkinter.CTkLabel(
                 master=self, text='Input Language: ')
             label_Input.pack(padx=20, pady=10)
-            input_language_combobox_var = customtkinter.StringVar(
+            self.input_language_combobox_var = customtkinter.StringVar(
                 value=self.default_input_language)
             input_language_combobox = customtkinter.CTkComboBox(master=self,
                                                                 values=self.input_language,
                                                                 command=self.input_dropdown_callbakck,
-                                                                variable=input_language_combobox_var)
+                                                                variable=self.input_language_combobox_var)
             input_language_combobox.pack(padx=20, pady=0,)
+            option_frame_list.append(self)
 
         label_Input = customtkinter.CTkLabel(
             master=self, text='Speaker: ')
         label_Input.pack(padx=20, pady=10)
-        speaker_combobox_var = customtkinter.StringVar(
+        self.speaker_combobox_var = customtkinter.StringVar(
             value=self.default_speaker)
         STTS.voice_name = self.default_speaker
-        speaker_combobox = customtkinter.CTkComboBox(master=self,
+        self.speaker_combobox = customtkinter.CTkComboBox(master=self,
                                                      values=self.speaker_names,
                                                      command=self.voice_dropdown_callbakck,
-                                                     variable=speaker_combobox_var)
-        speaker_combobox.pack(padx=20, pady=0)
+                                                     variable=self.speaker_combobox_var)
+        self.speaker_combobox.pack(padx=20, pady=0)
 
         label_Input = customtkinter.CTkLabel(
             master=self, text='Style: ')
@@ -833,8 +828,30 @@ class OptionsFrame(customtkinter.CTkFrame):
         self.style_combobox.pack(padx=20, pady=0)
 
         self.audio_device_selection = AudiodeviceSelection(
-            master=self, set_command=self.input_device_index_update_callback, get_command=self.input_device_index_get_callback, device_type='input', show_driver_selection=False, show_device_selection=False)
+            master=self,
+            set_command=self.input_device_index_update_callback,
+            get_command=self.input_device_index_get_callback,
+            device_type='input', show_driver_selection=False, show_device_selection=False)
         self.audio_device_selection.pack(padx=20, pady=10)
+
+        option_menu_list.append(self)
+
+    def refresh_speaker(self):
+        self.speaker_names = STTS.get_speaker_names()
+        self.default_speaker = self.speaker_names[0]
+        self.current_speaker = self.default_speaker
+
+        self.current_styles = STTS.get_speaker_styles(self.current_speaker)
+        self.selected_style = self.current_styles[0]
+        STTS.speaker_id = self.selected_style['id']
+
+        self.speaker_combobox_var.set(self.default_speaker)
+        STTS.voice_name = self.default_speaker
+        self.speaker_combobox.configure(values=self.speaker_names)
+
+        self.style_combobox_var.set(self.selected_style['name'])
+        self.style_combobox.configure(values=list(map(lambda style: style['name'], self.current_styles)))
+
 
     @staticmethod
     def input_device_index_update_callback(value, _=None):
@@ -846,7 +863,10 @@ class OptionsFrame(customtkinter.CTkFrame):
 
     @staticmethod
     def input_dropdown_callbakck(choice):
+        global option_frame_list
         STTS.change_input_language(choice)
+        for i in option_frame_list:
+            i.input_language_combobox_var.set(choice)
 
     def voice_dropdown_callbakck(self, choice):
         self.current_speaker = choice
@@ -1009,87 +1029,56 @@ class SettingsFrame(customtkinter.CTkScrollableFrame):
 
 
         self.audio_device_selection = AudiodeviceSelection(
-            master=self, set_command=self.input_device_index_update_callback, get_command=self.input_device_index_get_callback, device_type='input')
+            master=self, set_command=self.input_device_index_update_callback,
+            get_command=self.input_device_index_get_callback, device_type='input')
         self.audio_device_selection.grid(
             row=3, column=0, padx=10, pady=10, sticky='NW', rowspan=1, columnspan=2)
         self.audio_device_selection = AudiodeviceSelection(
-            master=self, set_command=self.output_device_index_update_callback, get_command=self.output_device_index_get_callback, device_type='output', index=0)
+            master=self, set_command=self.output_device_index_update_callback,
+            get_command=self.output_device_index_get_callback, device_type='output', index=0)
         self.audio_device_selection.grid(
             row=3, column=1, padx=10, pady=10, sticky='NW', rowspan=1, columnspan=3)
         self.audio_device_selection = AudiodeviceSelection(
-            master=self, set_command=self.output_device_index_update_callback, get_command=self.output_device_index_get_callback, device_type='output', index=1)
+            master=self, set_command=self.output_device_index_update_callback,
+            get_command=self.output_device_index_get_callback, device_type='output', index=1)
         self.audio_device_selection.grid(
             row=4, column=0, padx=10, pady=10, sticky='NW', rowspan=1, columnspan=3)
 
 
-        self.use_google_translator_var = customtkinter.BooleanVar(self, translator.use_google_translator)
-        use_google_translator_checkbox = customtkinter.CTkCheckBox(master=self, text="Use google translator", command=self.set_use_google_translator_var,
-                                                       variable=self.use_google_translator_var, onvalue=True, offvalue=False)
-        use_google_translator_checkbox.grid(row=5, column=0, padx=10, pady=10, sticky='W')
-
-
-        self.use_deepl_var = customtkinter.BooleanVar(self, translator.use_deepl)
-        use_deepl_checkbox = customtkinter.CTkCheckBox(master=self, text="Use deepl (api key required)", command=self.set_use_deepl_var,
-                                                       variable=self.use_deepl_var, onvalue=True, offvalue=False)
-        use_deepl_checkbox.grid(row=4+1+1, column=0, padx=10, pady=10, sticky='W')
-        self.deepl_api_key_var = customtkinter.StringVar(
-            self, translator.deepl_api_key)
-        self.deepl_api_key_var.trace_add('write', self.update_deepl_api_key)
-        self.deepl_api_key_input = customtkinter.CTkEntry(
-            master=self, textvariable=self.deepl_api_key_var)
-        self.deepl_api_key_input.grid(
-            row=6, column=1, padx=10, pady=10, sticky='W')
-
-
-        self.use_voicevox_var = customtkinter.BooleanVar(self, STTS.use_cloud_voice_vox)
-        use_voicevox_checkbox = customtkinter.CTkCheckBox(master=self, text="Use voicevox on cloud (api key optional)", command=self.set_use_voicevox_var,
+        self.use_voicevox_var = customtkinter.BooleanVar(self, STTS.use_voicevox)
+        use_voicevox_checkbox = customtkinter.CTkCheckBox(self, text='Use voicevox',
+                                                          command=self.set_use_voicevox_var,
                                                           variable=self.use_voicevox_var, onvalue=True, offvalue=False)
-        use_voicevox_checkbox.grid(row=7, column=0, padx=10, pady=10, sticky='W')
-        self.voicevox_api_key_var = customtkinter.StringVar(
-            self, STTS.voice_vox_api_key)
-        self.voicevox_api_key_var.trace_add(
-            'write', self.update_voicevox_api_key)
-        self.voicevox_api_key_input = customtkinter.CTkEntry(
-            master=self, textvariable=self.voicevox_api_key_var)
-        self.voicevox_api_key_input.grid(
-            row=7, column=1, padx=10, pady=10, sticky='W')
+        use_voicevox_checkbox.grid(row=5, column=0, padx=10, pady=10, sticky='W')
+        self.use_cloud_voicevox_var = customtkinter.BooleanVar(self, STTS.use_cloud_voicevox)
+        use_cloud_voicevox_checkbox = customtkinter.CTkCheckBox(master=self, text="Use voicevox on cloud (api key optional)",
+                                                                command=self.set_use_cloud_voicevox_var,
+                                                                variable=self.use_cloud_voicevox_var, onvalue=True, offvalue=False)
+        use_cloud_voicevox_checkbox.grid(row=6, column=0, padx=10, pady=10, sticky='W')
+        self.voicevox_api_key_var = customtkinter.StringVar(self, STTS.voicevox_api_key)
+        self.voicevox_api_key_var.trace_add('write', self.update_voicevox_api_key)
+        self.voicevox_api_key_input = customtkinter.CTkEntry(master=self, textvariable=self.voicevox_api_key_var)
+        self.voicevox_api_key_input.grid(row=6, column=1, padx=10, pady=10, sticky='W')
 
+        self.local_voicevox_url_label = customtkinter.CTkLabel(self, text='Voicevox engine url')
+        self.local_voicevox_url_label.grid(row=7, column=0, padx=10, pady=10, sticky='W')
+        self.local_voicevox_url_var = customtkinter.StringVar(self, STTS.VOICE_VOX_URL_LOCAL)
+        self.local_voicevox_url_var.trace_add('write', self.update_voicevox_local_url)
+        self.local_voicevox_url_entry = customtkinter.CTkEntry(master=self, textvariable=self.local_voicevox_url_var)
+        self.local_voicevox_url_entry.grid(row=7, column=1, padx=10, pady=10, sticky='W')
 
-        self.use_text_generation_web_ui_var = customtkinter.BooleanVar(self, chatbot.use_text_generation_web_ui)
-        use_text_generation_web_ui_checkbox = customtkinter.CTkCheckBox(master=self, text="Use text-generator-ui api instead of OpenAI API",
-                                                                        command=self.set_use_text_generation_web_ui_var,
-                                                          variable=self.use_text_generation_web_ui_var, onvalue=True, offvalue=False)
-        use_text_generation_web_ui_checkbox.grid(row=8, column=0, padx=10, pady=10, sticky='W')
+        self.local_voicevox_reconnect_button = customtkinter.CTkButton(master=self, text=f'Connect: {STTS.voicevox_server_started}',
+                                                                       command=self.connect_voicevox_engine)
+        self.local_voicevox_reconnect_button.grid(row=8, column=0, padx=10, pady=10, sticky='W')
 
-
-        self.label_openai_api_key = customtkinter.CTkLabel(
-            master=self, text=f'Open-AI API key(required to chat): ')
-        self.label_openai_api_key.grid(
-            row=9, column=0, padx=10, pady=10, sticky='W')
-        self.openai_api_key_var = customtkinter.StringVar(
-            self, chatbot.openai_api_key)
-        self.openai_api_key_var.trace_add(
-            'write', self.update_openai_api_key)
-        self.openai_api_key_input = customtkinter.CTkEntry(
-            master=self, textvariable=self.openai_api_key_var)
-        self.openai_api_key_input.grid(
-            row=9, column=1, padx=10, pady=10, sticky='W')
-
-
-        self.use_elevenlab_var = customtkinter.BooleanVar(
-            self, STTS.use_elevenlab)
+        self.use_elevenlab_var = customtkinter.BooleanVar(self, STTS.use_elevenlab)
         use_elevenlab_checkbox = customtkinter.CTkCheckBox(master=self, text="Use elevenlab on cloud (api key required)", command=self.set_use_elevenlab_var,
                                                            variable=self.use_elevenlab_var, onvalue=True, offvalue=False)
-        use_elevenlab_checkbox.grid(
-            row=10, column=0, padx=10, pady=10, sticky='W')
-        self.elevenlab_api_key_var = customtkinter.StringVar(
-            self, STTS.voice_vox_api_key)
-        self.elevenlab_api_key_var.trace_add(
-            'write', self.update_elevenlab_api_key)
-        self.elevenlab_api_key_input = customtkinter.CTkEntry(
-            master=self, textvariable=self.elevenlab_api_key_var)
-        self.elevenlab_api_key_input.grid(
-            row=10, column=1, padx=10, pady=10, sticky='W')
+        use_elevenlab_checkbox.grid(row=9, column=0, padx=10, pady=10, sticky='W')
+        self.elevenlab_api_key_var = customtkinter.StringVar(self, STTS.voicevox_api_key)
+        self.elevenlab_api_key_var.trace_add('write', self.update_elevenlab_api_key)
+        self.elevenlab_api_key_input = customtkinter.CTkEntry(master=self, textvariable=self.elevenlab_api_key_var)
+        self.elevenlab_api_key_input.grid(row=9, column=1, padx=10, pady=10, sticky='W')
 
         with open("elevenlabVoices.json", "r") as json_file:
             elevenlab_voice_response = json.load(json_file)
@@ -1103,40 +1092,53 @@ class SettingsFrame(customtkinter.CTkScrollableFrame):
 
         if elevenlab_voice_setting != '':
             default_voice = elevenlab_voice_setting
-        self.elevenlab_voice_combobox_var = customtkinter.StringVar(
-            value=default_voice)
+        self.elevenlab_voice_combobox_var = customtkinter.StringVar(value=default_voice)
         self.audio_input_combobox = customtkinter.CTkComboBox(master=self,
                                                               values=self.elevenlab_voice_list_names,
                                                               command=self.elevenlab_voice_dropdown_callback,
                                                               variable=self.elevenlab_voice_combobox_var)
-        self.audio_input_combobox.grid(
-            row=11, column=0, padx=10, pady=10, sticky='W')
+        self.audio_input_combobox.grid(row=10, column=0, padx=10, pady=10, sticky='W')
+
+
+        self.vall_e_x_url_label = customtkinter.CTkLabel(self, text='Vall-e-x url')
+        self.vall_e_x_url_label.grid(row=10+1, column=0, padx=10, pady=10, sticky='W')
+        self.vall_e_x_url_var = customtkinter.StringVar(self, STTS.VALL_E_X_URL)
+        self.vall_e_x_url_var.trace_add('write', self.update_vall_e_x_url)
+        self.vall_e_x_url_entry = customtkinter.CTkEntry(self, textvariable=self.vall_e_x_url_var)
+        self.vall_e_x_url_entry.grid(row=10+1, column=1, padx=10, pady=10, sticky='W')
+
+
 
         default = False
-        setting = settings.get_settings(
-            'use_ingame_push_to_talk')
+        setting = settings.get_settings('use_ingame_push_to_talk')
         if setting != '':
             default = setting
         STTS.use_ingame_push_to_talk_key = default
-        self.use_ingame_push_to_talk_key_var = customtkinter.BooleanVar(
-            self, STTS.use_ingame_push_to_talk_key)
+        self.use_ingame_push_to_talk_key_var = customtkinter.BooleanVar(self, STTS.use_ingame_push_to_talk_key)
         default = 'f'
         setting = settings.get_settings('ingame_push_to_talk_key')
         if setting != '':
             default = setting
         STTS.ingame_push_to_talk_key = default
-        self.ingame_push_to_talk_key_checkbox = customtkinter.CTkCheckBox(master=self, text=f'In-game push to talk key: {STTS.ingame_push_to_talk_key}', command=self.set_use_ingame_push_to_talk_key_var,
-                                                                          variable=self.use_ingame_push_to_talk_key_var, onvalue=True, offvalue=False)
-        self.ingame_push_to_talk_key_checkbox.grid(
-            row=12, column=0, padx=10, pady=10, sticky='W')
+        self.ingame_push_to_talk_key_checkbox = customtkinter.CTkCheckBox(master=self,
+                                                                          text=f'In-game push to talk key: {STTS.ingame_push_to_talk_key}',
+                                                                          command=self.set_use_ingame_push_to_talk_key_var,
+                                                                          variable=self.use_ingame_push_to_talk_key_var,
+                                                                          onvalue=True, offvalue=False)
+        self.ingame_push_to_talk_key_checkbox.grid(row=11+1+1, column=0, padx=10, pady=10, sticky='W')
 
         self.ingame_push_to_talk_key_Button = customtkinter.CTkButton(master=self,
                                                                       text="change key",
                                                                       command=self.change_ingame_push_to_talk_key,
-                                                                      fg_color='grey'
-                                                                      )
-        self.ingame_push_to_talk_key_Button.grid(
-            row=12, column=1, padx=10, pady=10, sticky='W')
+                                                                      fg_color='grey')
+        self.ingame_push_to_talk_key_Button.grid(row=11+1+1, column=1, padx=10, pady=10, sticky='W')
+
+    def connect_voicevox_engine(self):
+        STTS.connect_voicevox_server()
+        self.local_voicevox_reconnect_button.configure(text=f'Connect: {STTS.voicevox_server_started}')
+        if STTS.voicevox_server_started:
+            for i in option_menu_list:
+                i.refresh_speaker()
 
     @staticmethod
     def input_device_index_update_callback(value, _=None):
@@ -1159,34 +1161,26 @@ class SettingsFrame(customtkinter.CTkScrollableFrame):
         STTS.mic_mode = choice
         settings.save_settings('mic_mode', choice)
 
-    def set_use_google_translator_var(self):
-        translator.use_google_translator = self.use_google_translator_var.get()
-        STTS.save_config('use_google_translator', translator.use_google_translator)
-
-    def set_use_deepl_var(self):
-        translator.use_deepl = self.use_deepl_var.get()
-        STTS.save_config('use_deepl', translator.use_deepl)
-
-    def update_deepl_api_key(self, _1, _2, _3):
-        translator.deepl_api_key = self.deepl_api_key_var.get()
-        STTS.save_config('deepl_api_key', translator.deepl_api_key)
-
     def set_use_voicevox_var(self):
-        print(f'use_cloud_voice_vox set to {self.use_voicevox_var.get()}')
-        STTS.use_cloud_voice_vox = self.use_voicevox_var.get()
-        STTS.save_config('use_cloud_voice_vox', STTS.use_cloud_voice_vox)
+        print(f'use_voicevox set to {self.use_voicevox_var.get()}')
+        STTS.use_voicevox = self.use_voicevox_var.get()
+        STTS.save_config('use_voicevox', STTS.use_voicevox)
+
+    def set_use_cloud_voicevox_var(self):
+        print(f'use_cloud_voicevox set to {self.use_cloud_voicevox_var.get()}')
+        STTS.use_cloud_voicevox = self.use_cloud_voicevox_var.get()
+        STTS.save_config('use_cloud_voicevox', STTS.use_cloud_voicevox)
 
     def update_voicevox_api_key(self, _1, _2, _3):
-        STTS.voice_vox_api_key = self.voicevox_api_key_var.get()
-        STTS.save_config('voice_vox_api_key', STTS.voice_vox_api_key)
+        STTS.voicevox_api_key = self.voicevox_api_key_var.get()
+        STTS.save_config('voicevox_api_key', STTS.voicevox_api_key)
 
-    def set_use_text_generation_web_ui_var(self):
-        print(f'use_text_generation_web_ui set to {self.use_text_generation_web_ui_var.get()}')
-        chatbot.use_text_generation_web_ui = self.use_text_generation_web_ui_var.get()
-        STTS.save_config('use_text_generation_web_ui', chatbot.use_text_generation_web_ui)
+    def update_voicevox_local_url(self, _1, _2, _3):
+        STTS.VOICE_VOX_URL_LOCAL = self.local_voicevox_url_var.get()
+        STTS.save_config('voicevox_local_url', STTS.VOICE_VOX_URL_LOCAL)
 
     def set_use_elevenlab_var(self):
-        print(f'use_elevenlab set to {self.use_voicevox_var.get()}')
+        print(f'use_elevenlab set to {self.use_cloud_voicevox_var.get()}')
         STTS.use_elevenlab = self.use_elevenlab_var.get()
         STTS.save_config('use_elevenlab', STTS.use_elevenlab)
 
@@ -1194,9 +1188,9 @@ class SettingsFrame(customtkinter.CTkScrollableFrame):
         STTS.elevenlab_api_key = self.elevenlab_api_key_var.get()
         STTS.save_config('elevenlab_api_key', STTS.elevenlab_api_key)
 
-    def update_openai_api_key(self, _1, _2, _3):
-        chatbot.openai_api_key = self.openai_api_key_var.get()
-        STTS.save_config('openai_api_key', chatbot.openai_api_key)
+    def update_vall_e_x_url(self, _1, _2, _3):
+        STTS.VALL_E_X_URL = self.vall_e_x_url_var.get()
+        STTS.save_config('vall_e_x_url', STTS.VALL_E_X_URL)
 
     def change_push_to_talk_key(self):
         thread = Thread(target=self.listen_for_key)
@@ -1286,7 +1280,7 @@ class ChatPage(Page):
             master=self, width=500, corner_radius=8)
         chat_frame.grid(row=0, column=1, padx=20, pady=20,
                         sticky="nswe")
-        options = OptionsFrame(master=self, enable_input_language=False)
+        options = OptionsFrame(master=self)
         options.grid(row=0, column=2, padx=20,
                      pady=20, sticky="nswe")
 
@@ -1335,6 +1329,7 @@ class App(customtkinter.CTk):
         self.title("Voice to Japanese")
         self.resizable(False, False)
         self.iconbitmap('./icon.ico', './icon.ico')
+        self.configure(background='#fafafa')
 
         sidebar = SidebarFrame(master=self, width=100)
         sidebar.grid(row=0, column=0, padx=20,
@@ -1395,7 +1390,8 @@ def print_sound(indata, _outdata, _frames, _time, _status):
 
 def listen_to_mic():
     with sd.Stream(callback=print_sound):
-        sd.sleep(10000000)
+        while True:
+            sd.sleep(10000000)
 
 
 def initialize_audio_devices():
@@ -1407,15 +1403,12 @@ def initialize_audio_devices():
 
 hostapis: tuple
 audio_devices: Optional[list] = None
-thread = Thread(target=listen_to_mic)
+thread = Thread(target=listen_to_mic, daemon=True)
 thread.start()
 
-print("Starting voicevox server...")
-STTS.start_voicevox_server()
-print("Initializing tts model...")
+
+print("Initializing stt model...")
 STTS.initialize_model()
-print("Initializing translator...")
-translator.initialize()
 print("loading Audio devices: ")
 initialize_audio_devices()
 print("loading config... ")
@@ -1423,7 +1416,15 @@ STTS.load_config()
 print("loading settings... ")
 settings.load_settings()
 
-
 app = App()
-app.configure(background='#fafafa')
+
+STTS.is_show_voicevox_connect_warn = False
+for i in mic_meters:
+    i.update_mic_meter_thread.start()
+
 app.mainloop()
+
+STTS.auto_recording = False
+chatbot.is_random_dialog_running = False
+streamChat.read_chat_youtube_thread_running = False
+SUB.is_running = False

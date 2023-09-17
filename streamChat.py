@@ -43,7 +43,6 @@ def read_chat_loop(chat):
         for c in chat.get().sync_items():
             log_message(f"{c.datetime} [{c.author.name}]- {c.message}")
             chatbot.send_user_input(c.message)
-            # print(response)
             time.sleep(1)
     log_message("Chat fetching ended")
 

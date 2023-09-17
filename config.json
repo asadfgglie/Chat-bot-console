@@ -1,14 +1,13 @@
 {
-    "use_deepl": false,
-    "deepl_api_key": "",
     "use_cloud_voice_vox": false,
-    "voice_vox_api_key": "",
-    "openai_api_key": "sk-111111111111111111111111111111111111111111111111",
+    "voicevox_api_key": "",
     "youtube_video_id": "",
     "twitch_access_token": "",
     "twitch_channel_name": "",
     "use_elevenlab": false,
     "elevenlab_api_key": "",
-    "use_text_generation_web_ui": true,
-    "use_google_translator": true
+    "voicevox_local_url": "127.0.0.1:50021",
+    "use_voicevox": false,
+    "vall_e_x_url": "26.62.195.104:6000",
+    "use_cloud_voicevox": false
 }

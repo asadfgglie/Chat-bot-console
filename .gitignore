@@ -5,13 +5,16 @@ Output/*
 .clean_env
 *.txt
 __*
+!__init__.py
 test*
 *.wav
 *.exe
 node_modules
-!lore.txt
 config.json
 settings2.json
 settings.json
 package-lock.json
 .idea
+.run
+vall_e_x/checkpoints
+log
