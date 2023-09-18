@@ -552,8 +552,10 @@ def playOriginal():
         last_input_text_processed = translate(last_input_text, inputLanguage, 'en')
     else:
         last_input_text_processed = last_input_text
-    text_ja = romajitable.to_kana(last_input_text_processed).katakana
-    text_ja = text_ja.replace('・', '')
+    text_ja = last_input_text_processed
+    if use_voicevox:
+        text_ja = romajitable.to_kana(last_input_text_processed).katakana
+        text_ja = text_ja.replace('・', '')
     synthesize_audio(text_ja, last_voice_param)
     log_message(f'playing input: {text_ja}')
     PlayAudio()
