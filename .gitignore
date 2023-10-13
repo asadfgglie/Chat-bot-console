@@ -18,3 +18,4 @@ package-lock.json
 .run
 vall_e_x/checkpoints
 log
+!requirements.txt

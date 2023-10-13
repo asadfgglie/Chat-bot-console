@@ -24,7 +24,8 @@ is_random_dialog_running = False
 
 
 def send_user_input(user_input, _continue=False, _regenerate=False):
-    log_message(f'{user_name}: {user_input}')
+    if user_input != '':
+        log_message(f'{user_name}: {user_input}')
     global history, is_talk
 
 

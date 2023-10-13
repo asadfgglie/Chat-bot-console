@@ -266,7 +266,8 @@ def vall_e_x_synthesize(text, lang):
     try:
         response = requests.request("POST", f'http://{VALL_E_X_URL}/synthesize_long', params={
             'text': text,
-            'lang': lang
+            'lang': lang,
+            'prompt': '春日部つむぎ'
         })
 
         with open(VOICE_OUTPUT_FILENAME, "wb") as file:

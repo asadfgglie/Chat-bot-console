@@ -6,8 +6,8 @@
     "twitch_channel_name": "",
     "use_elevenlab": false,
     "elevenlab_api_key": "",
-    "voicevox_local_url": "127.0.0.1:50021",
-    "use_voicevox": false,
+    "voicevox_local_url": "localhost:50021",
+    "use_voicevox": true,
     "vall_e_x_url": "26.62.195.104:6000",
     "use_cloud_voicevox": false
 }

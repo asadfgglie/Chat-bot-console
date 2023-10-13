@@ -349,8 +349,20 @@ class ChatFrame(customtkinter.CTkFrame):
         self.textbox.configure(state=customtkinter.DISABLED)
 
         os.makedirs('./log/', exist_ok=True)
-        with open(f'./log/{time.strftime("%Y_%m_%d__%H_%M_%S", time.localtime(time.time()))}.json', 'w') as f:
+        os.makedirs('./log/dataset/', exist_ok=True)
+        with open(f'./log/{time.strftime(f"{chatbot.user_name}_to_{chatbot.AI_name}_%Y_%m_%d_%H_%M_%S", time.localtime(time.time()))}.json', 'w') as f:
             f.write(json.dumps(chatbot.history, indent=2))
+        with open(f'./log/dataset/{time.strftime(f"{chatbot.user_name}_to_{chatbot.AI_name}_%Y_%m_%d_%H_%M_%S", time.localtime(time.time()))}.json', 'rw') as f:
+            tmp = []
+            for turn in chatbot.history['internal']:
+                user_input, bot_response = turn
+                tmp.append({
+                    'user_name': chatbot.user_name,
+                    'input': user_input,
+                    'bot_name': chatbot.AI_name,
+                    'output': bot_response
+                })
+            f.write(json.dumps(tmp, indent=2))
 
         chatbot.history = {
             'internal': [],
@@ -361,7 +373,7 @@ class ChatFrame(customtkinter.CTkFrame):
         self.textbox.configure(state=customtkinter.NORMAL)
         tmp = self.textbox.get('1.0', customtkinter.END)
         self.textbox.delete('1.0', customtkinter.END)
-        self.textbox.insert('1.0', tmp[:tmp.rfind(f'{chatbot.user_name}: ')])
+        self.textbox.insert('1.0', tmp[:tmp.rfind(f'{chatbot.user_name}: ') if tmp.rfind(f'{chatbot.user_name}: ') != -1 else tmp.rfind(f'{chatbot.AI_name}: ')])
         self.textbox.configure(state=customtkinter.DISABLED)
 
         try:
@@ -377,7 +389,7 @@ class ChatFrame(customtkinter.CTkFrame):
         self.textbox.configure(state=customtkinter.NORMAL)
         tmp = self.textbox.get('1.0', customtkinter.END)
         self.textbox.delete('1.0', customtkinter.END)
-        self.textbox.insert('1.0', tmp[:tmp.rfind(f'{chatbot.user_name}: ')])
+        self.textbox.insert('1.0', tmp[:tmp.rfind(f'{chatbot.user_name}: ') if tmp.rfind(f'{chatbot.user_name}: ') != -1 else tmp.rfind(f'{chatbot.AI_name}: ')])
         self.textbox.configure(state=customtkinter.DISABLED)
 
         try:
@@ -392,7 +404,7 @@ class ChatFrame(customtkinter.CTkFrame):
         self.textbox.configure(state=customtkinter.NORMAL)
         tmp = self.textbox.get('1.0', customtkinter.END)
         self.textbox.delete('1.0', customtkinter.END)
-        self.textbox.insert('1.0', tmp[:tmp.rfind(f'{chatbot.user_name}: ')])
+        self.textbox.insert('1.0', tmp[:tmp.rfind(f'{chatbot.user_name}: ') if tmp.rfind(f'{chatbot.user_name}: ') != -1 else tmp.rfind(f'{chatbot.AI_name}: ')])
         self.textbox.configure(state=customtkinter.DISABLED)
 
         try:
@@ -662,53 +674,34 @@ class AudiodeviceSelection(customtkinter.CTkFrame):
 class SubtitlesFrame(customtkinter.CTkFrame):
     def __init__(self, master, **kwargs):
         super().__init__(master, **kwargs)
-        self.subtitle_overlay = None
-        self.label = customtkinter.CTkLabel(
+        self.subtitle_overlay: Optional['SubtitleOverlay'] = None
+        self.position_label = customtkinter.CTkLabel(
             master=self, text='Subtitle position')
-        self.label.grid(row=0, column=0, padx=10, pady=10, sticky='W')
-        self.sub_pos_x = 0.2
+        self.position_label.grid(row=0, column=0, padx=10, pady=10, sticky='W')
+        self.sub_pos_x = 0.5
         self.sub_pos_y = 0.8
 
         x_slider = customtkinter.CTkSlider(
             master=self, from_=0, to=100, command=self.slider_event_x)
         x_slider.grid(row=0, column=1, padx=10, pady=10, sticky='W')
         y_slider = customtkinter.CTkSlider(
-            master=self, from_=0, to=100,  command=self.slider_event_y)
+            master=self, from_=0, to=100, command=self.slider_event_y)
         y_slider.grid(row=0, column=2, padx=10, pady=10, sticky='W')
 
-        # self.phrase_max_length_var = customtkinter.IntVar(
-        #     value=5)
-        # self.phrase_max_length_label = customtkinter.CTkLabel(
-        #     master=self, text=f'Phrase max length: {self.phrase_max_length_var.get()}')
-        # self.phrase_max_length_label.grid(
-        #     row=3, column=0, padx=10, pady=10, sticky='W')
-        # self.phrase_max_length_slider = customtkinter.CTkSlider(
-        #     master=self, from_=3, to=30, command=self.update_phrase_max_length, variable=self.phrase_max_length_var)
-        # self.phrase_max_length_slider.grid(
-        #     row=3, column=1, padx=10, pady=10, sticky='W')
-
-        # self.audio_device_selection = AudiodeviceSelection(
-        #     master=self, set_command=self.device_index_update_callback, get_command=self.device_index_get_callback, device_type='input')
-        # self.audio_device_selection.grid(
-        #     row=4, column=0, padx=10, pady=10, sticky='W', rowspan=1, columnspan=2)
+        self.alpha_label = customtkinter.CTkLabel(self, text='Subtitle alpha')
+        self.alpha_label.grid(row=1, column=0, padx=10, pady=10, sticky='W')
+        alpha_slider = customtkinter.CTkSlider(
+            self, from_=0, to=100, command=self.slider_event_alpha)
+        alpha_slider.grid(row=1, column=1, padx=10, pady=10, sticky='W')
+        self.sub_alpha = 0.8
 
         self.toggle_overlay_button = customtkinter.CTkButton(
             self, text="start overlay", command=self.toggle_subtitle_button_callback)
-        self.toggle_overlay_button.grid(
-            row=5, column=0, padx=10, pady=10, sticky='W')
+        self.toggle_overlay_button.grid(row=5, column=0, padx=10, pady=10, sticky='W')
 
-        self.hide_border_var = customtkinter.BooleanVar(self, True)
-        show_border_checkbox = customtkinter.CTkCheckBox(master=self, text="Hide border on overlay", command=self.set_show_border,
-                                                         variable=self.hide_border_var, onvalue=True, offvalue=False)
-
-        show_border_checkbox.grid(
-            row=5, column=1, padx=10, pady=10, sticky='W')
-
-    # def device_index_update_callback(self, value, _=None):
-    #     SUB.device_idx = value
-    #
-    # def device_index_get_callback(self, _=None):
-    #     return SUB.device_idx
+    def slider_event_alpha(self, value):
+        self.sub_alpha = value/100
+        self.subtitle_overlay.attributes('-alpha', self.sub_alpha)
 
     def slider_event_x(self, value):
         self.sub_pos_x = value/100
@@ -735,7 +728,6 @@ class SubtitlesFrame(customtkinter.CTkFrame):
             self.subtitle_overlay = SubtitleOverlay()
             SUB.text_change_eventhandlers.append(self.update_text)
             SUB.start()
-            self.subtitle_overlay.overrideredirect(self.hide_border_var.get())
         else:
             self.subtitle_overlay.focus()  # if window exists focus it
 
@@ -748,17 +740,7 @@ class SubtitlesFrame(customtkinter.CTkFrame):
         self.subtitle_overlay.label.configure(text=text)
 
     def move_text(self, x, y):
-        self.subtitle_overlay.label.place(relx=x, rely=y, anchor='w')
-
-    # def update_phrase_max_length(self, value):
-    #     SUB.m_phrase_time_limit = value
-    #     self.phrase_max_length_label.configure(
-    #         text=f'Phrase max length: {self.phrase_max_length_var.get()}')
-
-    def set_show_border(self):
-        if not (self.subtitle_overlay is None or not self.subtitle_overlay.winfo_exists()):
-            # if subtitle_overlay exists
-            self.subtitle_overlay.overrideredirect(self.hide_border_var.get())
+        self.subtitle_overlay.label.place(relx=x, rely=y)
 
 
 class SubtitleOverlay(customtkinter.CTkToplevel):
@@ -768,11 +750,13 @@ class SubtitleOverlay(customtkinter.CTkToplevel):
         self.title("app")
         self.resizable(True, True)
         self.attributes("-topmost", True)
+        self.attributes('-fullscreen', True)
+        self.attributes('-alpha', 0.8)
         self.wm_attributes('-transparentcolor', 'black')
         self.configure(fg_color='black')
         self.label = customtkinter.CTkLabel(
-            master=self, text='default text', fg_color='black', text_color="white", font=("Arial", 45), wraplength=1500, anchor='w')
-        self.label.place(relx=0.5, rely=0.8, anchor='w')
+            master=self, text='default text', fg_color='#111111', text_color="white", font=("Arial", 45), wraplength=1500, anchor='w')
+        self.label.place(relx=0.5, rely=0.8)
 
 
 class OptionsFrame(customtkinter.CTkFrame):
