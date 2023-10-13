@@ -755,7 +755,7 @@ class SubtitleOverlay(customtkinter.CTkToplevel):
         self.wm_attributes('-transparentcolor', 'black')
         self.configure(fg_color='black')
         self.label = customtkinter.CTkLabel(
-            master=self, text='default text', fg_color='#111111', text_color="white", font=("Arial", 45), wraplength=1500, anchor='w')
+            master=self, text='This is a fucking long long default text', fg_color='#111111', text_color="white", font=("Arial", 45), wraplength=1500)
         self.label.place(relx=0.5, rely=0.8)
 
 
