@@ -752,6 +752,7 @@ class SubtitleOverlay(customtkinter.CTkToplevel):
         self.attributes("-topmost", True)
         self.attributes('-fullscreen', True)
         self.attributes('-alpha', 0.8)
+        self.state('zoomed')
         self.wm_attributes('-transparentcolor', 'black')
         self.configure(fg_color='black')
         self.label = customtkinter.CTkLabel(
