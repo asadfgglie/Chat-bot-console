@@ -556,7 +556,7 @@ class AudiodeviceSelection(customtkinter.CTkFrame):
                 value=default_device)
             self.audio_input_combobox = customtkinter.CTkComboBox(master=self,
                                                                   values=self.filtered_audio_device_names,
-                                                                  command=self.audio_input_dropdown_callbakck,
+                                                                  command=self.audio_input_dropdown_callback,
                                                                   variable=self.audio_input_combobox_var)
             self.audio_input_combobox.grid(
                 row=1, column=1, padx=10, pady=10, sticky='W')
@@ -589,7 +589,7 @@ class AudiodeviceSelection(customtkinter.CTkFrame):
         with self._subtitle_mic_stream:
             sd.sleep(10000000)
 
-    def audio_input_dropdown_callbakck(self, choice):
+    def audio_input_dropdown_callback(self, choice):
         if self.device_type == 'input':
             settings.save_settings('input_device', choice)
         elif self.device_type == 'output':
@@ -827,7 +827,7 @@ class OptionsFrame(customtkinter.CTkFrame):
                 value=self.default_input_language)
             input_language_combobox = customtkinter.CTkComboBox(master=self,
                                                                 values=self.input_language,
-                                                                command=self.input_dropdown_callbakck,
+                                                                command=self.input_dropdown_callback,
                                                                 variable=self.input_language_combobox_var)
             input_language_combobox.pack(padx=20, pady=0,)
             option_frame_list.append(self)
@@ -839,9 +839,9 @@ class OptionsFrame(customtkinter.CTkFrame):
             value=self.default_speaker)
         STTS.voice_name = self.default_speaker
         self.speaker_combobox = customtkinter.CTkComboBox(master=self,
-                                                     values=self.speaker_names,
-                                                     command=self.voice_dropdown_callbakck,
-                                                     variable=self.speaker_combobox_var)
+                                                          values=self.speaker_names,
+                                                          command=self.voice_dropdown_callback,
+                                                          variable=self.speaker_combobox_var)
         self.speaker_combobox.pack(padx=20, pady=0)
 
         label_Input = customtkinter.CTkLabel(
@@ -853,7 +853,7 @@ class OptionsFrame(customtkinter.CTkFrame):
         self.style_combobox = customtkinter.CTkComboBox(master=self,
                                                         values=list(
                                                             map(lambda style: style['name'], self.current_styles)),
-                                                        command=self.style_dropdown_callbakck,
+                                                        command=self.style_dropdown_callback,
                                                         variable=self.style_combobox_var)
         self.style_combobox.pack(padx=20, pady=0)
 
@@ -892,13 +892,13 @@ class OptionsFrame(customtkinter.CTkFrame):
         return STTS.input_device_id
 
     @staticmethod
-    def input_dropdown_callbakck(choice):
+    def input_dropdown_callback(choice):
         global option_frame_list
         STTS.change_input_language(choice)
         for i in option_frame_list:
             i.input_language_combobox_var.set(choice)
 
-    def voice_dropdown_callbakck(self, choice):
+    def voice_dropdown_callback(self, choice):
         self.current_speaker = choice
         self.current_styles = STTS.get_speaker_styles(self.current_speaker)
         self.style_combobox.configure(values=list(
@@ -910,7 +910,7 @@ class OptionsFrame(customtkinter.CTkFrame):
         STTS.speaker_id = self.selected_style['id']
         print(f'Changed speaker ID to: {STTS.speaker_id}')
 
-    def style_dropdown_callbakck(self, choice):
+    def style_dropdown_callback(self, choice):
         STTS.speaker_id = next(
             style['id'] for style in self.current_styles if choice == style['name'])
         print(f'Changed speaker ID to: {STTS.speaker_id}')
