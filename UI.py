@@ -682,26 +682,29 @@ class SubtitlesFrame(customtkinter.CTkFrame):
         self.sub_pos_y = 0.8
 
         x_slider = customtkinter.CTkSlider(
-            master=self, from_=0, to=100, command=self.slider_event_x)
+            master=self, from_=0, to=100, command=self.slider_event_x, variable=customtkinter.DoubleVar(self, self.sub_pos_x*100))
         x_slider.grid(row=0, column=1, padx=10, pady=10, sticky='W')
         y_slider = customtkinter.CTkSlider(
-            master=self, from_=0, to=100, command=self.slider_event_y)
+            master=self, from_=0, to=100, command=self.slider_event_y, variable=customtkinter.DoubleVar(self, self.sub_pos_y*100))
         y_slider.grid(row=0, column=2, padx=10, pady=10, sticky='W')
 
+        self.sub_alpha = 0.8
         self.alpha_label = customtkinter.CTkLabel(self, text='Subtitle alpha')
         self.alpha_label.grid(row=1, column=0, padx=10, pady=10, sticky='W')
         alpha_slider = customtkinter.CTkSlider(
-            self, from_=0, to=100, command=self.slider_event_alpha)
+            self, from_=0, to=100, command=self.slider_event_alpha, variable=customtkinter.DoubleVar(self, self.sub_alpha*100))
         alpha_slider.grid(row=1, column=1, padx=10, pady=10, sticky='W')
-        self.sub_alpha = 0.8
 
         self.toggle_overlay_button = customtkinter.CTkButton(
             self, text="start overlay", command=self.toggle_subtitle_button_callback)
         self.toggle_overlay_button.grid(row=5, column=0, padx=10, pady=10, sticky='W')
 
+        self.front = ["Arial", 45]
+
     def slider_event_alpha(self, value):
         self.sub_alpha = value/100
-        self.subtitle_overlay.attributes('-alpha', self.sub_alpha)
+        if self.subtitle_overlay is not None:
+            self.subtitle_overlay.attributes('-alpha', self.sub_alpha)
 
     def slider_event_x(self, value):
         self.sub_pos_x = value/100
@@ -714,50 +717,92 @@ class SubtitlesFrame(customtkinter.CTkFrame):
     def toggle_subtitle_button_callback(self):
         if self.subtitle_overlay is None or not self.subtitle_overlay.winfo_exists():
             # create window if its None or destroyed
-            self.open_subtitle_overlay()
+            self._open_subtitle_overlay()
             self.toggle_overlay_button.configure(
                 text="close overlay", fg_color='#fc7b5b')
         else:
-            self.stop_subtitle_overlay()
+            self._stop_subtitle_overlay()
             self.toggle_overlay_button.configure(
                 text="start overlay", fg_color='grey')
 
-    def open_subtitle_overlay(self):
+    def _open_subtitle_overlay(self):
         if self.subtitle_overlay is None or not self.subtitle_overlay.winfo_exists():
             # create window if its None or destroyed
-            self.subtitle_overlay = SubtitleOverlay()
+            self.subtitle_overlay = SubtitleOverlay(self)
             SUB.text_change_eventhandlers.append(self.update_text)
             SUB.start()
         else:
             self.subtitle_overlay.focus()  # if window exists focus it
 
-    def stop_subtitle_overlay(self):
+    def _stop_subtitle_overlay(self):
         if not (self.subtitle_overlay is None or not self.subtitle_overlay.winfo_exists()):
+            SUB.text_change_eventhandlers.remove(self.update_text)
             self.subtitle_overlay.destroy()
             SUB.stop()
+            self.subtitle_overlay = None
 
-    def update_text(self, text):
-        self.subtitle_overlay.label.configure(text=text)
+    def update_text(self, text: str):
+        if self.subtitle_overlay is not None:
+            label = self.subtitle_overlay.label
+            self.front[1] = 45
+            label.config(text=text.replace(', ', '.\n').removesuffix('\n'), x=0, y=0, font=self.front)
+            label.update_idletasks()
+
+            while label.winfo_width() > self.subtitle_overlay.winfo_width() or label.winfo_height() > self.subtitle_overlay.winfo_height():
+                self.front[1] -= 1
+                label.config(font=self.front)
+                label.update_idletasks()
+
+            if self.sub_pos_y > 0.5:
+                i = 0
+                while label.winfo_y() + label.winfo_height() > self.subtitle_overlay.winfo_height():
+                    i -= 1
+                    label.place(y=i)
+                    label.update_idletasks()
+            else:
+                i = 0
+                while label.winfo_y() < 0:
+                    i += 1
+                    label.place(y=i)
+                    label.update_idletasks()
+
+            if self.sub_pos_x > 0.5:
+                i = 0
+                while label.winfo_x() + label.winfo_width() > self.subtitle_overlay.winfo_width():
+                    i -= 1
+                    label.place(x=i)
+                    label.update_idletasks()
+            else:
+                i = 0
+                while label.winfo_x() < 0:
+                    i += 1
+                    label.place(x=i)
+                    label.update_idletasks()
 
     def move_text(self, x, y):
-        self.subtitle_overlay.label.place(relx=x, rely=y)
+        if self.subtitle_overlay is not None:
+            self.subtitle_overlay.label.place(relx=x, rely=y)
 
 
 class SubtitleOverlay(customtkinter.CTkToplevel):
-    def __init__(self):
+    def __init__(self, sub_frame: SubtitlesFrame):
         super().__init__()
         self.geometry("1920x1080+0+0")
         self.title("app")
         self.resizable(True, True)
+
         self.attributes("-topmost", True)
         self.attributes('-fullscreen', True)
-        self.attributes('-alpha', 0.8)
+        self.attributes('-alpha', sub_frame.sub_alpha)
         self.state('zoomed')
+
         self.wm_attributes('-transparentcolor', 'black')
         self.configure(fg_color='black')
         self.label = customtkinter.CTkLabel(
-            master=self, text='This is a fucking long long default text', fg_color='#111111', text_color="white", font=("Arial", 45), wraplength=1500)
-        self.label.place(relx=0.5, rely=0.8)
+            master=self, text='This is a long long default text for testing. You can change the position and alpha by yourself.'.replace('. ', '.\n').removesuffix('\n'),
+            fg_color='#111111', text_color="white", font=tuple(sub_frame.front))
+        self.label.place(relx=sub_frame.sub_pos_x, rely=sub_frame.sub_pos_y, anchor='center')
+        self.protocol("WM_DELETE_WINDOW", sub_frame.toggle_subtitle_button_callback)
 
 
 class OptionsFrame(customtkinter.CTkFrame):
