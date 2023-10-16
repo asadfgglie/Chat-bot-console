@@ -34,24 +34,57 @@ def load_config():
             data = json.load(json_file)
             print(json.dumps(data, indent=2))
 
-            global VOICE_VOX_URL_LOCAL
-            VOICE_VOX_URL_LOCAL = data['voicevox_local_url']
-            global voicevox_api_key
-            voicevox_api_key = data['voicevox_api_key']
-            global use_cloud_voicevox
-            use_cloud_voicevox = data['use_cloud_voicevox']
-            global use_elevenlab
-            use_elevenlab = data['use_elevenlab']
-            global elevenlab_api_key
-            elevenlab_api_key = data['elevenlab_api_key']
-            streamChat.twitch_access_token = data['twitch_access_token']
-            streamChat.twitch_channel_name = data['twitch_channel_name']
-            streamChat.youtube_video_id = data['youtube_video_id']
-            global use_voicevox
-            use_voicevox = data['use_voicevox']
-            global VALL_E_X_URL
-            VALL_E_X_URL = data['vall_e_x_url']
-
+            try:
+                global VOICE_VOX_URL_LOCAL
+                VOICE_VOX_URL_LOCAL = data['voicevox_local_url']
+            except:
+                pass
+            try:
+                global voicevox_api_key
+                voicevox_api_key = data['voicevox_api_key']
+            except:
+                pass
+            try:
+                global use_cloud_voicevox
+                use_cloud_voicevox = data['use_cloud_voicevox']
+            except:
+                pass
+            try:
+                global use_elevenlab
+                use_elevenlab = data['use_elevenlab']
+            except:
+                pass
+            try:
+                global elevenlab_api_key
+                elevenlab_api_key = data['elevenlab_api_key']
+            except:
+                pass
+            try:
+                streamChat.twitch_access_token = data['twitch_access_token']
+            except:
+                pass
+            try:
+                streamChat.twitch_channel_name = data['twitch_channel_name']
+            except:
+                pass
+            try:
+                streamChat.youtube_video_id = data['youtube_video_id']
+            except:
+                pass
+            try:
+                global use_voicevox
+                use_voicevox = data['use_voicevox']
+            except:
+                pass
+            try:
+                global VALL_E_X_URL
+                VALL_E_X_URL = data['vall_e_x_url']
+            except:
+                pass
+            try:
+                chatbot.HOST = data['text_ui_url']
+            except:
+                pass
             if elevenlab_api_key == '':
                 elevenlab_api_key = os.getenv("ELEVENLAB_API_KEY")
 
@@ -60,7 +93,7 @@ def load_config():
         print(traceback.format_exc())
 
 
-def save_config(key, value):
+def save_config(key: str, value):
     try:
         with open("config.json", "r") as json_file:
             config = json.load(json_file)
@@ -73,7 +106,7 @@ def save_config(key, value):
         print("Unable to load JSON file.")
         print(traceback.format_exc())
 
-def translate(text, from_code, to_code):
+def translate(text: str, from_code: str, to_code: str):
     if use_voicevox:
         return GoogleTranslator(source=from_code, target=to_code).translate(text)
     else:

@@ -348,21 +348,22 @@ class ChatFrame(customtkinter.CTkFrame):
         self.textbox.delete('1.0', customtkinter.END)
         self.textbox.configure(state=customtkinter.DISABLED)
 
-        os.makedirs('./log/', exist_ok=True)
-        os.makedirs('./log/dataset/', exist_ok=True)
-        with open(f'./log/{time.strftime(f"{chatbot.user_name}_to_{chatbot.AI_name}_%Y_%m_%d_%H_%M_%S", time.localtime(time.time()))}.json', 'w') as f:
-            f.write(json.dumps(chatbot.history, indent=2))
-        with open(f'./log/dataset/{time.strftime(f"{chatbot.user_name}_to_{chatbot.AI_name}_%Y_%m_%d_%H_%M_%S", time.localtime(time.time()))}.json', 'rw') as f:
-            tmp = []
-            for turn in chatbot.history['internal']:
-                user_input, bot_response = turn
-                tmp.append({
-                    'user_name': chatbot.user_name,
-                    'input': user_input,
-                    'bot_name': chatbot.AI_name,
-                    'output': bot_response
-                })
-            f.write(json.dumps(tmp, indent=2))
+        if len(chatbot.history['internal']) > 0:
+            os.makedirs('./log/', exist_ok=True)
+            os.makedirs('./log/dataset/', exist_ok=True)
+            with open(f'./log/{time.strftime(f"{chatbot.user_name}_to_{chatbot.AI_name}_%Y_%m_%d_%H_%M_%S", time.localtime(time.time()))}.json', 'w') as f:
+                f.write(json.dumps(chatbot.history, indent=2))
+            with open(f'./log/dataset/{time.strftime(f"{chatbot.user_name}_to_{chatbot.AI_name}_%Y_%m_%d_%H_%M_%S", time.localtime(time.time()))}.json', 'w') as f:
+                tmp = []
+                for turn in chatbot.history['internal']:
+                    user_input, bot_response = turn
+                    tmp.append({
+                        'user_name': chatbot.user_name,
+                        'input': user_input,
+                        'bot_name': chatbot.AI_name,
+                        'output': bot_response
+                    })
+                f.write(json.dumps(tmp, indent=2))
 
         chatbot.history = {
             'internal': [],
@@ -508,7 +509,7 @@ class AudiodeviceSelection(customtkinter.CTkFrame):
                 driver_setting = settings.get_settings(f'output_audio_driver_{self.index}')
             self.default_driver = self.audio_driver_names[0]
             print(
-                f'Looking for {driver_setting} in {self.audio_driver_names}.')
+                f'Looking for \'{driver_setting}\' in {self.audio_driver_names}.')
             if driver_setting in self.audio_driver_names:
                 print("found")
                 self.default_driver = driver_setting
@@ -548,7 +549,7 @@ class AudiodeviceSelection(customtkinter.CTkFrame):
                 device_setting = settings.get_settings(f'output_device_{self.index}')
             default_device = 'Default'
             print(
-                f'Looking for {device_setting} in {self.filtered_audio_device_names}.')
+                f'Looking for \'{device_setting}\' in {self.filtered_audio_device_names}.')
             if device_setting in self.filtered_audio_device_names:
                 print("found")
                 default_device = device_setting
@@ -745,12 +746,16 @@ class SubtitlesFrame(customtkinter.CTkFrame):
         if self.subtitle_overlay is not None:
             label = self.subtitle_overlay.label
             self.front[1] = 45
-            label.config(text=text.replace(', ', '.\n').removesuffix('\n'), x=0, y=0, font=self.front)
+            text = text.replace('. ', '.\n').replace('! ', '!\n').replace('? ', '?\n').replace('* ', '*\n')
+            while text.endswith('\n'):
+                text = text.removesuffix('\n')
+            label.configure(text=text, font=tuple(self.front))
+            label.place(x=0, y=0)
             label.update_idletasks()
 
             while label.winfo_width() > self.subtitle_overlay.winfo_width() or label.winfo_height() > self.subtitle_overlay.winfo_height():
                 self.front[1] -= 1
-                label.config(font=self.front)
+                label.configure(font=tuple(self.front))
                 label.update_idletasks()
 
             if self.sub_pos_y > 0.5:
@@ -1116,7 +1121,7 @@ class SettingsFrame(customtkinter.CTkScrollableFrame):
                 "name": voice['name'], "voice_id": voice['voice_id']},  elevenlab_voice_response['voices']))
             self.elevenlab_voice_list_names = list(
                 map(lambda voice: voice['name'],  elevenlab_voice_response['voices']))
-            print(self.elevenlab_voice_list)
+
         default_voice = "Elli"
         elevenlab_voice_setting = settings.get_settings("elevenlab_voice_name")
 
@@ -1131,12 +1136,11 @@ class SettingsFrame(customtkinter.CTkScrollableFrame):
 
 
         self.vall_e_x_url_label = customtkinter.CTkLabel(self, text='Vall-e-x url')
-        self.vall_e_x_url_label.grid(row=10+1, column=0, padx=10, pady=10, sticky='W')
+        self.vall_e_x_url_label.grid(row=11, column=0, padx=10, pady=10, sticky='W')
         self.vall_e_x_url_var = customtkinter.StringVar(self, STTS.VALL_E_X_URL)
         self.vall_e_x_url_var.trace_add('write', self.update_vall_e_x_url)
         self.vall_e_x_url_entry = customtkinter.CTkEntry(self, textvariable=self.vall_e_x_url_var)
-        self.vall_e_x_url_entry.grid(row=10+1, column=1, padx=10, pady=10, sticky='W')
-
+        self.vall_e_x_url_entry.grid(row=11, column=1, padx=10, pady=10, sticky='W')
 
 
         default = False
@@ -1155,13 +1159,20 @@ class SettingsFrame(customtkinter.CTkScrollableFrame):
                                                                           command=self.set_use_ingame_push_to_talk_key_var,
                                                                           variable=self.use_ingame_push_to_talk_key_var,
                                                                           onvalue=True, offvalue=False)
-        self.ingame_push_to_talk_key_checkbox.grid(row=11+1+1, column=0, padx=10, pady=10, sticky='W')
+        self.ingame_push_to_talk_key_checkbox.grid(row=13, column=0, padx=10, pady=10, sticky='W')
 
         self.ingame_push_to_talk_key_Button = customtkinter.CTkButton(master=self,
                                                                       text="change key",
                                                                       command=self.change_ingame_push_to_talk_key,
                                                                       fg_color='grey')
-        self.ingame_push_to_talk_key_Button.grid(row=11+1+1, column=1, padx=10, pady=10, sticky='W')
+        self.ingame_push_to_talk_key_Button.grid(row=13, column=1, padx=10, pady=10, sticky='W')
+
+        self.text_ui_url_label = customtkinter.CTkLabel(self, text='text-ui url')
+        self.text_ui_url_label.grid(row=14, column=0, padx=10, pady=10, sticky='W')
+        self.text_ui_url_var = customtkinter.StringVar(self, chatbot.HOST)
+        self.text_ui_url_var.trace_add('write', self.update_text_ui_url)
+        self.text_ui_url_entry = customtkinter.CTkEntry(self, textvariable=self.text_ui_url_var)
+        self.text_ui_url_entry.grid(row=14, column=1, padx=10, pady=10, sticky='W')
 
     def connect_voicevox_engine(self):
         STTS.connect_voicevox_server()
@@ -1200,6 +1211,10 @@ class SettingsFrame(customtkinter.CTkScrollableFrame):
         print(f'use_cloud_voicevox set to {self.use_cloud_voicevox_var.get()}')
         STTS.use_cloud_voicevox = self.use_cloud_voicevox_var.get()
         STTS.save_config('use_cloud_voicevox', STTS.use_cloud_voicevox)
+
+    def update_text_ui_url(self, _1, _2, _3):
+        chatbot.HOST = self.text_ui_url_var.get()
+        STTS.save_config('text_ui_url', chatbot.HOST)
 
     def update_voicevox_api_key(self, _1, _2, _3):
         STTS.voicevox_api_key = self.voicevox_api_key_var.get()
@@ -1326,9 +1341,7 @@ class StreamPage(Page):
             master=self, stream_type='twitch',  width=500, corner_radius=8)
         stream_frame.grid(row=0, column=1, padx=20, pady=20,
                           sticky="nswe")
-        # options = OptionsFrame(master=self, enable_input_language=False)
-        # options.grid(row=0, column=2, padx=20,
-        #              pady=20, sticky="nswe")
+
         self.chat_textbox = customtkinter.CTkTextbox(
             self, width=200, height=200)
         self.chat_textbox.grid(row=1, column=0, padx=20, pady=20, columnspan=2,
@@ -1356,7 +1369,7 @@ class App(customtkinter.CTk):
     def __init__(self):
         super().__init__()
         self.geometry("850x500")
-        self.title("Voice to Japanese")
+        self.title("Chat bot console")
         self.resizable(False, False)
         self.iconbitmap('./icon.ico', './icon.ico')
         self.configure(background='#fafafa')

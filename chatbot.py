@@ -7,6 +7,10 @@ import subLocal as SUB
 
 user_name = '朝歌'
 AI_name = 'LiuLi'
+HOST = 'localhost:5000'
+URI = 'http://{host}/api/v1/chat'
+CHARACTER = 'LiuLi'
+PRESET = 'Midnight Enigma'
 
 AI_RESPONSE_FILENAME = 'ai-response.txt'
 is_talk = True
@@ -16,7 +20,7 @@ min_no_talking_time = 1 # min
 history = {
     'internal': [],
     'visible': []
-} # for text-generation-ui API
+}
 
 logging_eventhandlers = []
 
@@ -37,7 +41,7 @@ def send_user_input(user_input, _continue=False, _regenerate=False):
         'auto_max_new_tokens': False,
         'history': history,
         'mode': 'chat',  # Valid options: 'chat', 'chat-instruct', 'instruct'
-        'character': 'LiuLi',
+        'character': CHARACTER,
         'instruction_template': 'Llama-v2',  # Will get autodetect if unset
         'your_name': user_name,
         'name1': user_name, # Optional
@@ -45,17 +49,17 @@ def send_user_input(user_input, _continue=False, _regenerate=False):
         'regenerate': _regenerate,
         '_continue': _continue,
         'chat_instruct_command': 'Continue the chat dialogue below. Write a single reply for the character "<|character|>".\n\n<|prompt|>',
-        'preset': 'Midnight Enigma',
+        'preset': PRESET,
         'seed': -1,
         'add_bos_token': True,
-        'truncation_length': 2048,
+        'truncation_length': 4096,
         'ban_eos_token': False,
         'skip_special_tokens': True,
         'stopping_strings': []
     }
-    print(f"Sending: {user_input} to text-generation-ui")
+    print(f"Sending: \"{user_input}\" to text-generation-ui")
     try:
-        response = requests.post(URI, json=request)
+        response = requests.post(URI.format(host=HOST), json=request)
 
         if response.status_code == 200:
             history = response.json()['results'][0]['history']
