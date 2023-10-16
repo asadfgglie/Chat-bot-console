@@ -28,13 +28,10 @@ is_random_dialog_running = False
 
 
 def send_user_input(user_input, _continue=False, _regenerate=False):
+    global history, is_talk, user_name, AI_name, HOST, URI, CHARACTER, PRESET, AI_RESPONSE_FILENAME
     if user_input != '':
         log_message(f'{user_name}: {user_input}')
-    global history, is_talk
 
-
-    HOST = 'localhost:5000'
-    URI = f'http://{HOST}/api/v1/chat'
     request = {
         'user_input': user_input,
         'max_new_tokens': 250,
