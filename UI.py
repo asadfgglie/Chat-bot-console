@@ -754,7 +754,7 @@ class SubtitlesFrame(customtkinter.CTkFrame):
         if self.subtitle_overlay is not None:
             label = self.subtitle_overlay.label
             self.front[1] = 45
-            text = text.replace('. ', '.\n').replace('! ', '!\n').replace('? ', '?\n').replace('* ', '*\n')
+            text = text.replace('. ', '.\n').replace('! ', '!\n').replace('? ', '?\n').replace('* ', '*\n').replace('。', '。\n').replace('！', '！\n').replace('？', '？\n')
             while text.endswith('\n'):
                 text = text.removesuffix('\n')
             label.configure(text=text, font=tuple(self.front))
