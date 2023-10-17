@@ -355,14 +355,22 @@ class ChatFrame(customtkinter.CTkFrame):
                 f.write(json.dumps(chatbot.history, indent=2))
             with open(f'./log/dataset/{time.strftime(f"{chatbot.user_name}_to_{chatbot.AI_name}_%Y_%m_%d_%H_%M_%S", time.localtime(time.time()))}.json', 'w') as f:
                 tmp = []
-                for turn in chatbot.history['internal']:
+                for index, turn in enumerate(chatbot.history['internal']):
                     user_input, bot_response = turn
-                    tmp.append({
-                        'user_name': chatbot.user_name,
-                        'input': user_input,
-                        'bot_name': chatbot.AI_name,
-                        'output': bot_response
-                    })
+                    if user_input != '':
+                        tmp.append({
+                            'user_name': chatbot.user_name,
+                            'input': user_input,
+                            'bot_name': chatbot.AI_name,
+                            'output': bot_response
+                        })
+                    if user_input == '' and index == 0:
+                        tmp.append({
+                            'user_name': chatbot.user_name,
+                            'input': 'Do you have any interesting stories to share with me?',
+                            'bot_name': chatbot.AI_name,
+                            'output': bot_response
+                        })
                 f.write(json.dumps(tmp, indent=2))
 
         chatbot.history = {
